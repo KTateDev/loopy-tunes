@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d0e12">
+<title>Hum Looper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one-column phone instrument — fixed header, transport card, scrolling layer stack, fixed bottom transport. */
+:root{
+  --bg:#0d0e12; --surface:#15171d; --surface-2:#1d2029; --surface-3:#262a35;
+  --line:#2a2e3a; --fg:#eceef3; --muted:#9298aa; --faint:#5d6375;
+  --rec:#ff4d5e; --rec-dim:rgba(255,77,94,.16); --accent:#9aa8ff; --accent-dim:rgba(154,168,255,.14);
+  --ok:#62d37e;
+  --font-ui:'Sora',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-num:'JetBrains Mono',ui-monospace,'Roboto Mono',monospace;
+  --r:14px; --ease:cubic-bezier(.2,.8,.2,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.4;overscroll-behavior:none;
+  padding-top:env(safe-area-inset-top,0px)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+button:disabled{opacity:.35;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+.app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+
+/* Header */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;gap:10px;padding-block:12px 10px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:21}
+.mark{width:30px;height:30px;border-radius:9px;background:var(--surface-2);display:grid;place-items:center;flex:none}
+.title{flex:1;min-width:0;text-align:left;display:flex;flex-direction:column;gap:1px}
+.title small{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.title span{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbtn{height:36px;min-width:36px;padding:0 12px;border-radius:10px;background:var(--surface-2);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:13px;position:relative;transition:background .2s,transform .12s var(--ease)}
+.hbtn:active{transform:scale(.95)}
+.hbtn.icon{padding:0}
+.dirty-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--accent);transform:scale(0);transition:transform .25s var(--ease)}
+.is-dirty .dirty-dot{transform:scale(1)}
+
+/* Transport card */
+.transport{background:var(--surface);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:12px}
+.trow{display:flex;align-items:center;gap:10px}
+.tempo{display:flex;align-items:center;gap:6px;flex:1}
+.step{width:40px;height:40px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center;font-size:20px;transition:transform .12s var(--ease),background .2s}
+.step:active{transform:scale(.92);background:var(--surface-3)}
+.bpm{flex:1;text-align:center;padding:2px 0;border-radius:12px;transition:background .2s}
+.bpm:active{background:var(--surface-2)}
+.bpm b{display:block;font-family:var(--font-num);font-size:30px;line-height:1.1;font-weight:700;letter-spacing:-.02em}
+.bpm em{font-style:normal;font-size:10.5px;color:var(--muted);letter-spacing:.14em;font-weight:600}
+.pos{text-align:right;min-width:74px}
+.pos b{display:block;font-family:var(--font-num);font-size:22px;font-weight:700;color:var(--muted);transition:color .2s}
+.playing .pos b{color:var(--fg)}
+.pos em{font-style:normal;font-size:10.5px;color:var(--faint);letter-spacing:.14em;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:34px;border-radius:999px;background:var(--surface-2);display:inline-flex;align-items:center;gap:6px;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--muted);transition:background .2s,color .2s,transform .12s var(--ease);position:relative}
+.chip:active{transform:scale(.96)}
+.chip select{appearance:none;-webkit-appearance:none;background:transparent;border:0;color:var(--fg);font-weight:600;padding-right:14px;font-family:var(--font-num);font-size:13px}
+.chip .caret{position:absolute;right:10px;pointer-events:none;color:var(--faint);font-size:9px}
+.chip.on{background:var(--accent-dim);color:var(--accent)}
+.chip .led{width:7px;height:7px;border-radius:50%;background:var(--faint);transition:background .2s,box-shadow .2s}
+.chip.on .led{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.beatdots{display:flex;gap:5px;justify-content:center;padding-top:2px}
+.beatdots i{width:6px;height:6px;border-radius:50%;background:var(--surface-3);transition:background .08s,transform .08s}
+.beatdots i.hit{background:var(--fg);transform:scale(1.35)}
+.beatdots i.hit.acc{background:var(--accent)}
+
+/* Layers */
+.section-head{display:flex;align-items:baseline;justify-content:space-between;padding:18px 2px 8px}
+.section-head h2{margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.section-head span{font-size:12px;color:var(--faint)}
+#layers{display:flex;flex-direction:column;gap:10px;--pos:0}
+.layer{display:flex;gap:10px;background:var(--surface);border-radius:var(--r);padding:10px 10px 10px 0;position:relative;overflow:hidden;
+  animation:rise .35s var(--ease) both;transition:opacity .25s,box-shadow .25s}
+.layer::before{content:"";width:4px;border-radius:0 4px 4px 0;background:var(--c);flex:none}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.layer.dim{opacity:.5}
+.layer.recording{box-shadow:inset 0 0 0 1.5px var(--rec)}
+.fx{width:34px;align-self:stretch;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;color:var(--muted);flex:none;transition:transform .12s var(--ease),background .2s}
+.fx:active{transform:scale(.94);background:var(--surface-3)}
+.lmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.ltop{display:flex;align-items:center;gap:8px}
+.lname{flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;height:30px}
+.lnum{width:22px;height:22px;border-radius:7px;background:var(--c);color:#0d0e12;font-family:var(--font-num);font-size:11.5px;font-weight:700;display:grid;place-items:center;flex:none}
+.ltext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.ltext.placeholder{color:var(--faint);font-weight:500}
+.lbtns{display:flex;gap:6px;flex:none}
+.tog{width:32px;height:30px;border-radius:9px;background:var(--surface-2);font-family:var(--font-num);font-weight:700;font-size:12.5px;color:var(--muted);transition:background .18s,color .18s,transform .12s var(--ease)}
+.tog:active{transform:scale(.92)}
+.tog.m.on{background:#3a2a10;color:#f5b94a}
+.tog.s.on{background:#142f3a;color:#4fb9ff}
+.ibtn{width:32px;height:30px;border-radius:9px;background:var(--surface-2);display:grid;place-items:center;color:var(--muted);transition:transform .12s var(--ease),background .2s}
+.ibtn:active{transform:scale(.92);background:var(--surface-3)}
+.wave{position:relative;height:48px;border-radius:9px;background:var(--surface-2);overflow:hidden}
+.wave canvas{position:absolute;inset:0;width:100%;height:100%}
+.ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;left:calc(var(--pos) * 100%);background:var(--fg);opacity:0;transition:opacity .2s;box-shadow:0 0 6px rgba(255,255,255,.4)}
+.playing .ph{opacity:.85}
+.lbot{display:flex;align-items:center;gap:6px}
+.vol{flex:1;min-width:50px}
+.rb{height:32px;border-radius:9px;background:var(--surface-2);display:inline-flex;align-items:center;gap:5px;padding:0 9px;font-size:12px;font-weight:600;color:var(--fg);transition:transform .12s var(--ease),background .2s,color .2s;white-space:nowrap}
+.rb:active{transform:scale(.94)}
+.rb .dot{width:8px;height:8px;border-radius:50%;background:var(--rec)}
+.rb.active{background:var(--rec);color:#fff}
+.rb.active .dot{background:#fff;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+input[type=range]{-webkit-appearance:none;appearance:none;height:28px;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(to right,var(--c,var(--accent)) var(--fill,50%),var(--surface-3) var(--fill,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--fg);margin-top:-7px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:var(--surface-3)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:4px;background:var(--c,var(--accent))}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;background:var(--fg)}
+
+/* Empty state */
+.empty{background:var(--surface);border-radius:var(--r);padding:22px 18px;display:flex;flex-direction:column;gap:14px;animation:rise .4s var(--ease) both}
+.empty h3{margin:0;font-size:19px;font-weight:600;text-wrap:balance}
+.empty p{margin:0;color:var(--muted)}
+.empty ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;counter-reset:s}
+.empty li{display:flex;gap:10px;align-items:flex-start;color:var(--muted);counter-increment:s}
+.empty li::before{content:counter(s);font-family:var(--font-num);font-size:11px;font-weight:700;width:20px;height:20px;border-radius:6px;background:var(--surface-2);color:var(--fg);display:grid;place-items:center;flex:none;margin-top:1px}
+.linkbtn{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+
+/* Bottom bar */
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:30;background:linear-gradient(to top,var(--bg) 70%,rgba(13,14,18,0));
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.bottom-in{max-width:560px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.play{width:62px;height:62px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;flex:none;transition:transform .15s var(--ease),background .2s}
+.play:active{transform:scale(.92)}
+.playing .play{background:var(--fg);color:var(--bg)}
+.recbig{flex:1;height:62px;border-radius:31px;background:var(--rec);color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:700;font-size:15.5px;position:relative;overflow:hidden;transition:transform .15s var(--ease),background .25s}
+.recbig:active{transform:scale(.97)}
+.recbig .ring{width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .1s}
+.recbig .prog{position:absolute;inset:0;background:rgba(255,255,255,.18);transform-origin:left;transform:scaleX(0)}
+/* Armed = count-in running, mic not live yet. Live = recording. */
+.rec-armed .recbig{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 2px rgba(255,77,94,.45)}
+.rec-armed .recbig .ring{background:transparent;box-shadow:inset 0 0 0 2.5px var(--rec);animation:armpulse calc(var(--beat,.5s)) var(--ease) infinite}
+@keyframes armpulse{0%{transform:scale(1.25);opacity:1}100%{transform:scale(1);opacity:.55}}
+.rec-live .recbig{background:var(--rec);color:#fff;box-shadow:0 0 0 0 rgba(255,77,94,.5);animation:liveglow 1.4s ease-in-out infinite}
+.rec-live .recbig .ring{border-radius:5px}
+@keyframes liveglow{50%{box-shadow:0 0 22px 2px rgba(255,77,94,.45)}}
+.recstate{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.12em;flex:none;
+  background:var(--surface-3);color:var(--muted);transition:background .2s,color .2s}
+.recstate i{width:7px;height:7px;border-radius:50%;background:var(--faint);transition:background .2s,box-shadow .2s}
+.recstate.live{background:var(--rec);color:#fff}
+.recstate.live i{background:#fff;animation:blink 1s infinite}
+.layer.armed{box-shadow:inset 0 0 0 1.5px rgba(255,77,94,.35)}
+.layer.armed .wave{opacity:.55}
+
+/* Count-in overlay */
+.countin{position:fixed;inset:0;z-index:40;display:grid;place-items:center;pointer-events:none;background:rgba(13,14,18,.55);opacity:0;transition:opacity .2s}
+.countin.show{opacity:1}
+.countin div{text-align:center}
+.countin b{display:block;font-family:var(--font-num);font-size:120px;line-height:1;font-weight:700;color:var(--fg)}
+.countin b.pulse{animation:pulse .3s var(--ease)}
+@keyframes pulse{from{transform:scale(1.25);color:var(--rec)}to{transform:none}}
+.countin span{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* Sheets */
+.sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;visibility:hidden}
+.sheet.open{visibility:visible}
+.backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:opacity .25s}
+.sheet.open .backdrop{opacity:1}
+.panel{position:relative;width:100%;max-width:560px;max-height:86%;overflow:auto;background:var(--surface);border-radius:20px 20px 0 0;
+  padding:8px max(18px,env(safe-area-inset-right,0px)) calc(22px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));
+  transform:translateY(100%);transition:transform .32s var(--ease)}
+.sheet.open .panel{transform:none}
+.grab{width:38px;height:4px;border-radius:4px;background:var(--surface-3);margin:4px auto 12px}
+.panel h3{margin:0 0 14px;font-size:17px;font-weight:600}
+.list{display:flex;flex-direction:column;gap:6px}
+.item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border-radius:12px;background:var(--surface-2);transition:background .2s,transform .12s var(--ease)}
+.item:active{transform:scale(.98);background:var(--surface-3)}
+.item .ic{color:var(--muted);display:grid;place-items:center;flex:none}
+.item .tx{flex:1;min-width:0}
+.item .tx b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .tx small{color:var(--muted);font-size:12px}
+.item.danger{color:var(--rec)}
+.item.danger .ic{color:var(--rec)}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.field label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.field .help{font-size:12.5px;color:var(--muted);margin:0}
+.txt{height:46px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);padding:0 14px;font-size:16px;width:100%}
+.txt:focus{border-color:var(--accent);outline:none}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btn{height:44px;padding:0 18px;border-radius:12px;background:var(--surface-2);font-weight:600;flex:1;transition:transform .12s var(--ease),background .2s}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--fg);color:var(--bg)}
+.btn.danger{background:var(--rec-dim);color:var(--rec)}
+.swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.sw{aspect-ratio:1;max-width:100%;border-radius:50%;background:var(--c);transition:transform .15s var(--ease);box-shadow:0 0 0 0 var(--fg)}
+.sw.sel{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--fg)}
+.sw:active{transform:scale(.9)}
+.bignum{font-family:var(--font-num);font-size:56px;font-weight:700;text-align:center;line-height:1}
+.readout{display:flex;justify-content:space-between;align-items:baseline}
+.readout b{font-family:var(--font-num);font-size:15px}
+.status{font-size:13px;color:var(--muted);min-height:18px;margin:0}
+.status.good{color:var(--ok)} .status.bad{color:var(--rec)}
+.note{background:var(--surface-2);border-radius:12px;padding:12px 14px;color:var(--muted);font-size:13px;margin:0 0 18px}
+
+/* Toast */
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:60;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  background:var(--surface-3);color:var(--fg);border-radius:12px;padding:11px 14px;display:flex;gap:14px;align-items:center;font-size:13.5px;font-weight:500;
+  max-width:calc(100% - 32px);transition:opacity .22s,transform .3s var(--ease);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{color:var(--accent);font-weight:700}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <div class="mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="#9aa8ff" stroke-width="2"/><path d="M8 12h1.5M11 9v6M14 10.5v3M16.5 12h-.5" stroke="#ff4d5e" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+    <button class="title" id="sessName" aria-label="Rename session"><small>Hum Looper</small><span id="sessNameText">Untitled idea</span></button>
+    <button class="hbtn" id="saveBtn"><span class="dirty-dot"></span>Save</button>
+    <button class="hbtn icon" id="menuBtn" aria-label="Menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+  </header>
+
+  <section class="transport" aria-label="Transport">
+    <div class="trow">
+      <div class="tempo">
+        <button class="step" id="bpmDown" aria-label="Slower">−</button>
+        <button class="bpm" id="bpmBtn" aria-label="Set tempo"><b class="num" id="bpmVal">90</b><em>BPM</em></button>
+        <button class="step" id="bpmUp" aria-label="Faster">+</button>
+      </div>
+      <div class="pos"><b id="posVal">1.1</b><em>BAR.BEAT</em></div>
+    </div>
+    <div class="beatdots" id="beatdots"></div>
+    <div class="chips">
+      <label class="chip">Bars <select id="barsSel" aria-label="Loop length in bars"></select><span class="caret">▼</span></label>
+      <label class="chip">Time <select id="sigSel" aria-label="Time signature"></select><span class="caret">▼</span></label>
+      <button class="chip" id="clickTog"><span class="led"></span>Click</button>
+      <button class="chip" id="countTog"><span class="led"></span>Count-in</button>
+    </div>
+  </section>
+
+  <div class="section-head"><h2>Layers</h2><span id="loopInfo" class="num"></span></div>
+  <div id="layers"></div>
+</div>
+
+<div class="bottom">
+  <div class="bottom-in">
+    <button class="play" id="playBtn" aria-label="Play">
+      <svg id="playIc" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+    </button>
+    <button class="recbig" id="recBtn"><span class="prog" id="recProg"></span><span class="ring"></span><span id="recLabel">Record new layer</span></button>
+  </div>
+</div>
+
+<div class="countin" id="countin"><div><b id="countNum">1</b><span>Recording in</span></div></div>
+<div class="sheet" id="sheet"><div class="backdrop" id="backdrop"></div><div class="panel" id="panel" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct" hidden></button></div>
+<input type="file" id="importFile" accept=".humloop,application/octet-stream" hidden>
+
+<script>
+'use strict';
+/* ============================================================
+   Hum Looper — Phase 1
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const PALETTE = ['#8c9bff','#ff6f91','#47d6c4','#f5b94a','#b98cff','#62d37e','#ff8f52','#4fb9ff','#ec7bda','#c9d35e'];
+const SIGS = [[4,4],[3,4],[2,4],[2,2],[6,8],[9,8],[12,8],[5,4],[7,4],[6,4],[5,8],[7,8],[3,8]];
+const BARS = [1,2,3,4,6,8,12,16];
+const MAX_LAYERS = 16;
+const ICON = {
+  play: '<path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2.5"/>',
+};
+const svg = (d, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const I = {
+  fx: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+  more: svg('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
+  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 16),
+  plus: svg('<path d="M12 5v14M5 12h14"/>', 14),
+  folder: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  newf: svg('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15h6"/>'),
+  down: svg('<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>'),
+  up: svg('<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  pen: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  palette: svg('<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/><path d="M12 21a2 2 0 0 1 0-4h2a3 3 0 0 0 3-3"/>'),
+  trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+  wave: svg('<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2M21 12h0"/>'),
+  zip: svg('<path d="M6 3h9l5 5v13H6z"/><path d="M10 3v2M10 7v2M10 11v2M10 15h2v3h-2z"/>'),
+  head: svg('<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/>'),
+};
+
+/* ---------------- Settings (per device) ---------------- */
+const settings = { latencyMs: null, clickVol: 0.6, lastSession: null };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('hl.settings') || '{}')); } catch (e) {}
+function saveSettings() { try { localStorage.setItem('hl.settings', JSON.stringify(settings)); } catch (e) {} }
+
+/* ---------------- Session state ---------------- */
+let S = freshSession();
+function freshSession() {
+  return { id: uid(), name: 'Untitled idea', bpm: 90, bars: 4, num: 4, den: 4, click: true, countIn: true, sr: 48000, layers: [], created: Date.now() };
+}
+let dirty = false;
+function setDirty(v = true) { dirty = v; $('#saveBtn').classList.toggle('is-dirty', v); }
+
+/* ---------------- Audio runtime ---------------- */
+const T = { ctx: null, sr: 0, master: null, clickBus: null, playing: false, startTime: 0, nextTick: 0, sources: new Map(),
+  timer: null, rec: null, worklet: null, stream: null, level: 0, calib: null, wake: null };
+
+const SR = () => T.sr || S.sr || 48000;
+const tickDur = () => (60 / S.bpm) * (4 / S.den);
+const barDur = () => S.num * tickDur();
+const loopDur = () => S.bars * barDur();
+const loopSamples = () => Math.round(loopDur() * SR());
+function autoLatency() {
+  if (!T.ctx) return 0.06;
+  return (T.ctx.outputLatency || 0) + (T.ctx.baseLatency || 0) + 0.025;
+}
+const latency = () => settings.latencyMs != null ? settings.latencyMs / 1000 : autoLatency();
+
+async function ensureCtx() {
+  if (!T.ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    T.ctx = new AC({ latencyHint: 'interactive' });
+    T.sr = T.ctx.sampleRate;
+    T.master = T.ctx.createGain(); T.master.connect(T.ctx.destination);
+    T.clickBus = T.ctx.createGain(); T.clickBus.gain.value = settings.clickVol; T.clickBus.connect(T.ctx.destination);
+    adoptSampleRate();
+    S.layers.forEach(attachLayer);
+    applyGains(true);
+  }
+  if (T.ctx.state !== 'running') { try { await T.ctx.resume(); } catch (e) {} }
+}
+function adoptSampleRate() {
+  for (const l of S.layers) {
+    if (l.sr && l.sr !== T.sr) { l.data = resample(l.data, l.sr, T.sr); l.history = l.history.map(h => ({ ...h, data: resample(h.data, l.sr, T.sr) })); l.sr = T.sr; l.ver++; }
+  }
+  S.sr = T.sr;
+}
+function attachLayer(l) {
+  if (!T.ctx || l.node) return;
+  l.node = T.ctx.createGain(); l.node.gain.value = 0; l.node.connect(T.master);
+}
+
+const CAPTURE_CODE = `
+class HLCapture extends AudioWorkletProcessor {
+  constructor(){ super(); this.buf = new Float32Array(2048); this.n = 0; this.f0 = 0; }
+  process(inputs){
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    if (this.n === 0) this.f0 = currentFrame;
+    this.buf.set(ch, this.n); this.n += ch.length;
+    if (this.n >= 2048) { this.port.postMessage({ frame: this.f0, data: this.buf.slice(0, this.n) }); this.n = 0; }
+    return true;
+  }
+}
+registerProcessor('hl-capture', HLCapture);`;
+
+async function ensureMic() {
+  if (T.worklet) return true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micError('insecure'); return false; }
+  try {
+    T.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  } catch (e) { micError(e && e.name); return false; }
+  try {
+    const url = URL.createObjectURL(new Blob([CAPTURE_CODE], { type: 'application/javascript' }));
+    await T.ctx.audioWorklet.addModule(url);
+    const src = T.ctx.createMediaStreamSource(T.stream);
+    T.worklet = new AudioWorkletNode(T.ctx, 'hl-capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    src.connect(T.worklet);
+    const silent = T.ctx.createGain(); silent.gain.value = 0;
+    T.worklet.connect(silent).connect(T.ctx.destination);
+    T.worklet.port.onmessage = e => onChunk(e.data.frame, e.data.data);
+    return true;
+  } catch (e) { micError('worklet'); return false; }
+}
+function micError(kind) {
+  const msg = {
+    insecure: 'The microphone only works when Hum Looper is opened from a secure web address (one starting with https://). Opening the file directly, or inside a preview, blocks the mic.',
+    NotAllowedError: 'Microphone access was blocked. In Chrome, tap the icon left of the address, open Permissions, and allow the microphone. Then try again.',
+    NotFoundError: 'No microphone was found on this device.',
+    worklet: 'This browser could not start the recorder. Update Chrome and try again.',
+  }[kind] || 'The microphone could not be started. Check that no other app is using it, then try again.';
+  openSheet(`<h3>Can't reach the microphone</h3><p class="note">${msg}</p><div class="btnrow"><button class="btn primary" data-close>Got it</button></div>`);
+}
+
+/* ---------------- Clicks & scheduler ---------------- */
+function accentOf(tick) {
+  const tpb = S.num, t = ((tick % tpb) + tpb) % tpb;
+  if (t === 0) return 2;
+  if (S.den === 8 && S.num % 3 === 0 && S.num > 3 && t % 3 === 0) return 1;
+  return 0;
+}
+function clickAt(t, level, bus = T.clickBus, gainMul = 1) {
+  const ctx = T.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'triangle';
+  o.frequency.value = level === 2 ? 1680 : level === 1 ? 1320 : 1000;
+  const peak = (level === 2 ? 0.9 : 0.55) * gainMul;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  o.connect(g).connect(bus); o.start(t); o.stop(t + 0.06);
+}
+function schedule() {
+  if (!T.playing) return;
+  const now = T.ctx.currentTime, td = tickDur();
+  while (true) {
+    const t = T.startTime + T.nextTick * td;
+    if (t > now + 0.12) break;
+    if (t >= now - 0.005) {
+      const r = T.rec;
+      const forced = r && r.countFrom != null && t >= r.countFrom - 1e-4 && t < r.recStart - 1e-4;
+      const preroll = T.nextTick < 0;
+      if ((S.click && !preroll) || forced) clickAt(t, accentOf(T.nextTick));
+      pulseBeat(t, T.nextTick);
+    }
+    T.nextTick++;
+  }
+}
+const beatQueue = [];
+function pulseBeat(t, tick) { beatQueue.push({ t, tick }); }
+
+/* ---------------- Layer buffers (stretch + fit) ---------------- */
+function getFitted(l) {
+  const N = loopSamples();
+  const key = `${S.bpm}|${N}|${l.ver}|${l.bpm}`;
+  if (l._fitKey === key) return l._fit;
+  let d = l.data;
+  if (Math.abs(l.bpm - S.bpm) > 1e-6) d = timeStretch(d, l.bpm / S.bpm);
+  l._fit = fitLength(d, N); l._fitKey = key; l._abKey = null;
+  return l._fit;
+}
+function getAudioBuffer(l) {
+  const f = getFitted(l);
+  if (l._abKey === l._fitKey && l._ab) return l._ab;
+  const ab = T.ctx.createBuffer(1, f.length, T.sr);
+  ab.copyToChannel(f, 0);
+  l._ab = ab; l._abKey = l._fitKey;
+  return ab;
+}
+function fitLength(d, N) {
+  if (d.length === N) return d;
+  const out = new Float32Array(N);
+  if (d.length >= N) { out.set(d.subarray(0, N)); return out; }
+  for (let i = 0; i < N; i++) out[i] = d[i % d.length];
+  return out;
+}
+/* WSOLA time stretch: factor = output length / input length; pitch is preserved. */
+function timeStretch(x, factor) {
+  if (Math.abs(factor - 1) < 1e-4 || x.length < 4096) return fitLength(x, Math.round(x.length * factor));
+  const N = 1024, Hs = N / 2, Ha = Hs / factor, tol = 256;
+  const outLen = Math.round(x.length * factor);
+  const out = new Float32Array(outLen + N), norm = new Float32Array(outLen + N);
+  const win = new Float32Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
+  const maxStart = x.length - N;
+  let prev = 0;
+  for (let k = 0; k * Hs < outLen; k++) {
+    const nominal = Math.round(k * Ha);
+    let best = clamp(nominal, 0, maxStart);
+    if (k > 0) {
+      const target = prev + Hs;
+      let bestC = -Infinity;
+      for (let d = -tol; d <= tol; d += 2) {
+        const c = nominal + d;
+        if (c < 0 || c > maxStart) continue;
+        let s = 0;
+        for (let i = 0; i < Hs; i += 4) { const a = target + i; s += x[c + i] * (a < x.length ? x[a] : 0); }
+        if (s > bestC) { bestC = s; best = c; }
+      }
+    }
+    const o = k * Hs;
+    for (let i = 0; i < N; i++) { out[o + i] += x[best + i] * win[i]; norm[o + i] += win[i]; }
+    prev = best;
+  }
+  const res = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) res[i] = norm[i] > 1e-3 ? out[i] / norm[i] : 0;
+  return res;
+}
+function resample(d, from, to) {
+  if (from === to) return d;
+  const ratio = from / to, n = Math.round(d.length / ratio), out = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const p = i * ratio, j = Math.floor(p), f = p - j; out[i] = (d[j] || 0) * (1 - f) + (d[j + 1] || 0) * f; }
+  return out;
+}
+
+/* ---------------- Transport ---------------- */
+function startLayerSource(l) {
+  if (!T.playing || !T.ctx || !l.data) return;
+  stopLayerSource(l);
+  attachLayer(l);
+  const src = T.ctx.createBufferSource();
+  src.buffer = getAudioBuffer(l); src.loop = true; src.connect(l.node);
+  const now = T.ctx.currentTime, L = loopDur();
+  if (T.startTime > now) src.start(T.startTime, 0);
+  else { const at = now + 0.01; src.start(at, ((at - T.startTime) % L + L) % L); }
+  T.sources.set(l.id, src);
+}
+function stopLayerSource(l) {
+  const s = T.sources.get(l.id);
+  if (s) { try { s.stop(); } catch (e) {} s.disconnect(); T.sources.delete(l.id); }
+}
+async function play() {
+  await ensureCtx();
+  if (T.playing) return;
+  T.startTime = T.ctx.currentTime + 0.06;
+  beginTransport(0);
+}
+function beginTransport(firstTick) {
+  T.playing = true; T.nextTick = firstTick;
+  S.layers.forEach(startLayerSource);
+  clearInterval(T.timer); T.timer = setInterval(schedule, 25); schedule();
+  document.body.classList.add('playing'); setPlayIcon(true); requestWake();
+}
+function stop() {
+  if (T.rec) cancelRecord(true);
+  T.playing = false; clearInterval(T.timer);
+  S.layers.forEach(stopLayerSource);
+  beatQueue.length = 0;
+  document.body.classList.remove('playing'); setPlayIcon(false); releaseWake();
+  $('#layers').style.setProperty('--pos', 0); $('#posVal').textContent = '1.1';
+}
+function setPlayIcon(on) { $('#playIc').innerHTML = on ? ICON.stop : ICON.play; $('#playBtn').setAttribute('aria-label', on ? 'Stop' : 'Play'); }
+function applyGains(instant) {
+  if (!T.ctx) return;
+  const any = S.layers.some(l => l.solo), now = T.ctx.currentTime;
+  for (const l of S.layers) {
+    attachLayer(l);
+    let on = any ? l.solo : !l.mute;
+    if (T.rec && T.rec.mode === 'replace' && T.rec.layer === l) on = false;
+    const v = on ? l.vol * l.vol : 0;
+    if (instant) l.node.gain.value = v; else l.node.gain.setTargetAtTime(v, now, 0.012);
+  }
+}
+/* Change tempo / bars / signature while keeping the loop's phase. */
+function changeTiming(mut) {
+  if (T.rec) { toast('Finish or cancel the take first'); renderTransport(); return; }
+  const oldL = loopDur();
+  mut();
+  if (T.playing) {
+    const now = T.ctx.currentTime;
+    const p = T.startTime > now ? 0 : (((now - T.startTime) % oldL) + oldL) % oldL / oldL;
+    T.startTime = T.startTime > now ? T.startTime : now - p * loopDur();
+    T.nextTick = Math.ceil((now - T.startTime) / tickDur());
+    S.layers.forEach(startLayerSource);
+  }
+  setDirty(); renderTransport(); renderLayers();
+}
+
+/* ---------------- Recording ---------------- */
+async function startRecord(mode, layer) {
+  await ensureCtx();
+  if (T.rec) return;
+  if (mode === 'new' && S.layers.length >= MAX_LAYERS) { toast(`Up to ${MAX_LAYERS} layers per session`); return; }
+  if (!(await ensureMic())) return;
+  const now = T.ctx.currentTime, bar = barDur();
+  let recStart, countFrom = null;
+  if (!T.playing) {
+    if (S.countIn) { T.startTime = now + 0.12 + bar; countFrom = T.startTime - bar; beginTransport(-S.num); }
+    else { T.startTime = now + 0.08; beginTransport(0); }
+    recStart = T.startTime;
+  } else if (S.countIn) {
+    const pos = Math.max(0, now - T.startTime);
+    const k = Math.ceil(pos / bar - 1e-3);
+    countFrom = T.startTime + k * bar; recStart = countFrom + bar;
+  } else recStart = now + 0.03;
+  const sr = T.sr, N = loopSamples();
+  T.rec = { mode, layer, recStart, countFrom, recEnd: recStart + loopDur(), buf: new Float32Array(N),
+    f0: Math.round(recStart * sr), f1: Math.round(recStart * sr) + N, startFrame: Math.round(T.startTime * sr), lastFrame: 0 };
+  applyGains();
+  renderLayers(); renderRecState();
+}
+function onChunk(frame, data) {
+  let s = 0; for (let i = 0; i < data.length; i += 4) s += data[i] * data[i];
+  T.level = Math.sqrt(s / (data.length / 4));
+  if (T.calib) T.calib.chunks.push({ frame, data });
+  const r = T.rec; if (!r) return;
+  const latS = Math.round(latency() * T.sr), N = r.buf.length;
+  for (let i = 0; i < data.length; i++) {
+    const f = frame + i - latS;
+    if (f < r.f0 || f >= r.f1) continue;
+    let idx = (f - r.startFrame) % N; if (idx < 0) idx += N;
+    r.buf[idx] = data[i];
+  }
+  r.lastFrame = frame + data.length - latS;
+  if (r.lastFrame >= r.f1) finishRecord();
+}
+function finishRecord() {
+  const r = T.rec; if (!r) return;
+  T.rec = null;
+  let l = r.layer;
+  if (r.mode === 'new') {
+    l = { id: uid(), name: '', color: nextColor(), vol: 0.9, mute: false, solo: false, data: r.buf, bpm: S.bpm, sr: T.sr, history: [], ver: 0 };
+    S.layers.push(l); attachLayer(l);
+  } else if (S.layers.includes(l)) {
+    pushHistory(l);
+    if (r.mode === 'overdub') {
+      const base = getFitted(l), sum = new Float32Array(r.buf.length);
+      for (let i = 0; i < sum.length; i++) sum[i] = (base[i] || 0) + r.buf[i];
+      l.data = sum;
+    } else l.data = r.buf;
+    l.bpm = S.bpm; l.sr = T.sr; l.ver++;
+  }
+  applyGains(); startLayerSource(l);
+  setDirty(); renderLayers(); renderRecState();
+  if (r.mode === 'new') haptic(20);
+}
+function cancelRecord(silent) {
+  if (!T.rec) return;
+  T.rec = null; applyGains(); renderLayers(); renderRecState();
+  if (!silent) toast('Take discarded');
+}
+function pushHistory(l) { l.history.push({ data: l.data, bpm: l.bpm }); if (l.history.length > 12) l.history.shift(); }
+function undoTake(l) {
+  const h = l.history.pop(); if (!h) return;
+  l.data = h.data; l.bpm = h.bpm; l.ver++;
+  startLayerSource(l); setDirty(); renderLayers(); toast('Last take undone');
+}
+function nextColor() {
+  const used = new Set(S.layers.map(l => l.color));
+  return PALETTE.find(c => !used.has(c)) || PALETTE[S.layers.length % PALETTE.length];
+}
+function haptic(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+/* ---------------- Wake lock ---------------- */
+async function requestWake() { try { if ('wakeLock' in navigator && !T.wake) { T.wake = await navigator.wakeLock.request('screen'); T.wake.addEventListener('release', () => { T.wake = null; }); } } catch (e) {} }
+function releaseWake() { try { T.wake && T.wake.release(); } catch (e) {} T.wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && T.playing) requestWake(); });
+
+/* ---------------- Rendering ---------------- */
+function renderTransport() {
+  $('#bpmVal').textContent = Math.round(S.bpm);
+  $('#barsSel').value = String(S.bars);
+  $('#sigSel').value = `${S.num}/${S.den}`;
+  $('#clickTog').classList.toggle('on', S.click);
+  $('#countTog').classList.toggle('on', S.countIn);
+  $('#sessNameText').textContent = S.name || 'Untitled idea';
+  $('#loopInfo').textContent = `${loopDur().toFixed(1)}s loop`;
+  const dots = $('#beatdots');
+  if (dots.children.length !== S.num) dots.innerHTML = Array.from({ length: S.num }, () => '<i></i>').join('');
+}
+function layerRow(l, i) {
+  const recThis = T.rec && T.rec.layer === l;
+  const hasUndo = l.history.length > 0;
+  const dim = S.layers.some(x => x.solo) ? !l.solo : l.mute;
+  return `<div class="layer${dim ? ' dim' : ''}${recThis ? ' recording' : ''}" data-id="${l.id}" style="--c:${l.color}">
+    <button class="fx" data-act="fx" aria-label="Layer effects">${I.fx}</button>
+    <div class="lmain">
+      <div class="ltop">
+        <button class="lname" data-act="name"><span class="lnum">${i + 1}</span><span class="ltext${l.name ? '' : ' placeholder'}">${l.name ? esc(l.name) : 'Add name'}</span></button>
+        ${recThis ? '<span class="recstate" data-recstate><i></i><b>ARMED</b></span>' : ''}
+        <div class="lbtns">
+          <button class="tog m${l.mute ? ' on' : ''}" data-act="mute" aria-label="Mute" aria-pressed="${l.mute}">M</button>
+          <button class="tog s${l.solo ? ' on' : ''}" data-act="solo" aria-label="Solo" aria-pressed="${l.solo}">S</button>
+          <button class="ibtn" data-act="more" aria-label="More options">${I.more}</button>
+        </div>
+      </div>
+      <div class="wave"><canvas></canvas><div class="ph"></div></div>
+      <div class="lbot">
+        <input type="range" class="vol" id="vol-${l.id}" min="0" max="1" step="0.01" value="${l.vol}" aria-label="Volume" style="--fill:${l.vol * 100}%">
+        <button class="rb${recThis && T.rec.mode === 'replace' ? ' active' : ''}" data-act="replace"><span class="dot"></span>Replace</button>
+        <button class="rb${recThis && T.rec.mode === 'overdub' ? ' active' : ''}" data-act="overdub">${I.plus}Overdub</button>
+        <button class="ibtn" data-act="undo" aria-label="Undo last take" ${hasUndo ? '' : 'disabled'}>${I.undo}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderLayers() {
+  const box = $('#layers');
+  const ghost = T.rec && T.rec.mode === 'new';
+  if (!S.layers.length && !ghost) {
+    box.innerHTML = `<div class="empty">
+      <h3>Hum your first loop</h3>
+      <ol>
+        <li>Plug in wired headphones so the click stays out of your recording.</li>
+        <li>Set the tempo, bars and time signature above.</li>
+        <li>Tap Record. You'll get a bar of count-in, then one loop to hum into.</li>
+      </ol>
+      <p>Timing a little off? <button class="linkbtn" id="emptyCal">Calibrate the recording offset</button>.</p>
+    </div>`;
+    $('#emptyCal').onclick = openSettings;
+    return;
+  }
+  let html = S.layers.map(layerRow).join('');
+  if (ghost) html += `<div class="layer recording" data-ghost style="--c:${nextColor()}">
+      <div class="fx" aria-hidden="true">${I.fx}</div>
+      <div class="lmain"><div class="ltop"><span class="lname"><span class="lnum">${S.layers.length + 1}</span><span class="ltext placeholder" id="ghostLabel">New layer</span></span><span class="recstate" data-recstate><i></i><b>ARMED</b></span></div>
+      <div class="wave"><canvas id="ghostCanvas"></canvas><div class="ph"></div></div></div></div>`;
+  box.innerHTML = html;
+  requestAnimationFrame(() => {
+    box.querySelectorAll('.layer[data-id]').forEach(row => { const l = S.layers.find(x => x.id === row.dataset.id); if (l) drawWave(row.querySelector('canvas'), getFitted(l), l.color); });
+  });
+}
+function drawWave(cv, data, color, upto) {
+  if (!cv) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  // bar & beat grid
+  const beats = S.bars * S.num;
+  for (let b = 1; b < beats; b++) {
+    const x = Math.round(b / beats * w) + 0.5;
+    g.fillStyle = b % S.num === 0 ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.035)';
+    g.fillRect(x, 0, 1, h);
+  }
+  if (!data || !data.length) return;
+  const cols = Math.floor(w / 2), step = data.length / cols, mid = h / 2;
+  g.fillStyle = color;
+  const lim = upto == null ? cols : Math.floor(upto * cols);
+  let peakMax = 0.02;
+  const peaks = new Float32Array(cols);
+  for (let c = 0; c < cols; c++) {
+    let m = 0; const a = Math.floor(c * step), b = Math.floor((c + 1) * step);
+    for (let i = a; i < b; i += 4) { const v = Math.abs(data[i]); if (v > m) m = v; }
+    peaks[c] = m; if (m > peakMax) peakMax = m;
+  }
+  const scale = Math.min(1 / peakMax, 6);
+  for (let c = 0; c < cols; c++) {
+    if (upto != null && c >= lim) break;
+    const amp = Math.max(1, Math.min(1, peaks[c] * scale) * (mid - 3));
+    g.globalAlpha = 0.9; g.fillRect(c * 2, mid - amp, 1.4, amp * 2);
+  }
+  g.globalAlpha = 1;
+}
+function renderRecState() {
+  const on = !!T.rec;
+  document.body.classList.toggle('rec-on', on);
+  if (!on) {
+    document.body.classList.remove('rec-armed', 'rec-live'); recPhase = null; recLabelText = '';
+    $('#recLabel').textContent = 'Record new layer';
+    $('#recProg').style.transform = 'scaleX(0)'; $('#countin').classList.remove('show');
+  } else { recPhase = null; recLabelText = ''; updateRecPhase(); }
+  ['#bpmDown', '#bpmUp', '#bpmBtn', '#barsSel', '#sigSel'].forEach(s => { $(s).disabled = on; });
+}
+
+/* Armed (count-in, mic not yet live) → Live (recording). */
+let recPhase = null, recLabelText = '';
+function updateRecPhase() {
+  const r = T.rec; if (!r || !T.ctx) return;
+  const now = T.ctx.currentTime, live = now >= r.recStart;
+  let label, pill;
+  if (live) { label = 'Recording · tap to cancel'; pill = 'REC'; }
+  else if (r.countFrom != null && now >= r.countFrom - 0.02) {
+    const n = clamp(Math.floor((now - r.countFrom) / tickDur()) + 1, 1, S.num);
+    label = `Count-in ${n} of ${S.num}`; pill = `COUNT-IN ${n}`;
+  } else { label = 'Get ready…'; pill = 'ARMED'; }
+  const phase = live ? 'live' : 'armed';
+  if (phase !== recPhase) {
+    recPhase = phase;
+    document.body.style.setProperty('--beat', `${tickDur().toFixed(3)}s`);
+    document.body.classList.toggle('rec-armed', !live);
+    document.body.classList.toggle('rec-live', live);
+    if (live) haptic(30);
+  }
+  document.querySelectorAll('.layer.recording').forEach(row => row.classList.toggle('armed', !live));
+  document.querySelectorAll('[data-recstate]').forEach(p => { p.classList.toggle('live', live); const b = p.querySelector('b'); if (b.textContent !== pill) b.textContent = pill; });
+  if (label !== recLabelText) { recLabelText = label; $('#recLabel').textContent = label; }
+}
+
+/* ---------------- Animation loop ---------------- */
+let lastCount = 0, frameN = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (!T.ctx || !T.playing) return;
+  const now = T.ctx.currentTime, L = loopDur(), td = tickDur();
+  if (now >= T.startTime) {
+    const p = ((now - T.startTime) % L + L) % L;
+    $('#layers').style.setProperty('--pos', (p / L).toFixed(4));
+    const bar = Math.floor(p / barDur()) + 1, beat = Math.floor((p % barDur()) / td) + 1;
+    $('#posVal').textContent = `${bar}.${beat}`;
+  }
+  while (beatQueue.length && beatQueue[0].t <= now) {
+    const { tick } = beatQueue.shift();
+    const dots = $('#beatdots').children, idx = ((tick % S.num) + S.num) % S.num;
+    for (let i = 0; i < dots.length; i++) dots[i].className = i === idx ? (idx === 0 ? 'hit acc' : 'hit') : '';
+  }
+  const r = T.rec, ov = $('#countin');
+  if (r) {
+    if (r.countFrom != null && now >= r.countFrom - 0.02 && now < r.recStart) {
+      const n = Math.floor((now - r.countFrom) / td) + 1;
+      ov.classList.add('show');
+      if (n !== lastCount) { const b = $('#countNum'); b.textContent = n; b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse'); lastCount = n; }
+    } else { ov.classList.remove('show'); lastCount = 0; }
+    const prog = clamp((now - r.recStart) / L, 0, 1);
+    $('#recProg').style.transform = `scaleX(${prog})`;
+    $('.recbig .ring').style.transform = `scale(${1 + Math.min(T.level * 6, 0.6)})`;
+    updateRecPhase();
+    if (++frameN % 4 === 0) {
+      const cv = r.mode === 'new' ? $('#ghostCanvas') : document.querySelector(`.layer[data-id="${r.layer.id}"] canvas`);
+      if (now >= r.recStart && cv) drawWave(cv, r.buf, r.mode === 'new' ? nextColor() : r.layer.color);
+    }
+    // safety: finish if capture stalls
+    if (now > r.recEnd + latency() + 0.6) finishRecord();
+  }
+}
+requestAnimationFrame(frame);
+
+/* ---------------- Sheets & toasts ---------------- */
+let sheetClose = null;
+function openSheet(html, onMount, onClose) {
+  const p = $('#panel');
+  p.innerHTML = '<div class="grab"></div>' + html;
+  $('#sheet').classList.add('open');
+  sheetClose = onClose || null;
+  p.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
+  onMount && onMount(p);
+}
+function closeSheet() { $('#sheet').classList.remove('open'); const f = sheetClose; sheetClose = null; f && f(); }
+$('#backdrop').addEventListener('click', closeSheet);
+let toastTimer;
+function toast(msg, actLabel, act) {
+  $('#toastMsg').textContent = msg;
+  const b = $('#toastAct');
+  if (actLabel) { b.hidden = false; b.textContent = actLabel; b.onclick = () => { act(); hideToast(); }; } else b.hidden = true;
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, actLabel ? 5000 : 2200);
+}
+function hideToast() { $('#toast').classList.remove('show'); }
+
+/* ---------------- Layer actions ---------------- */
+$('#layers').addEventListener('click', e => {
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const row = btn.closest('.layer'); const l = S.layers.find(x => x.id === row.dataset.id); if (!l) return;
+  const act = btn.dataset.act;
+  if (act === 'mute') { l.mute = !l.mute; applyGains(); setDirty(); renderLayers(); }
+  else if (act === 'solo') { l.solo = !l.solo; applyGains(); setDirty(); renderLayers(); }
+  else if (act === 'replace' || act === 'overdub') {
+    if (T.rec) { if (T.rec.layer === l && T.rec.mode === act) cancelRecord(); else toast('Finish or cancel the current take first'); return; }
+    startRecord(act, l);
+  }
+  else if (act === 'undo') { if (T.rec) return toast('Finish or cancel the take first'); undoTake(l); }
+  else if (act === 'name') renameLayer(l);
+  else if (act === 'more') layerMenu(l);
+  else if (act === 'fx') toast('Layer effects arrive in phase 2');
+});
+$('#layers').addEventListener('input', e => {
+  if (!e.target.classList.contains('vol')) return;
+  const row = e.target.closest('.layer'); const l = S.layers.find(x => x.id === row.dataset.id); if (!l) return;
+  l.vol = +e.target.value; e.target.style.setProperty('--fill', `${l.vol * 100}%`); applyGains(); setDirty();
+});
+function renameLayer(l) {
+  openSheet(`<h3>Name this layer</h3><div class="field"><input class="txt" id="lnameIn" maxlength="40" placeholder="e.g. Bass, Lead, Hook" value="${esc(l.name)}"></div>
+    <div class="btnrow"><button class="btn" data-close>Cancel</button><button class="btn primary" id="lnameOk">Save name</button></div>`, p => {
+    const inp = $('#lnameIn', p); setTimeout(() => inp.focus(), 250);
+    const ok = () => { l.name = inp.value.trim(); setDirty(); renderLayers(); closeSheet(); };
+    $('#lnameOk', p).onclick = ok; inp.onkeydown = e => { if (e.key === 'Enter') ok(); };
+  });
+}
+function layerMenu(l) {
+  const idx = S.layers.indexOf(l) + 1;
+  openSheet(`<h3>Layer ${idx}${l.name ? ' · ' + esc(l.name) : ''}</h3><div class="list">
+    <button class="item" id="mRename"><span class="ic">${I.pen}</span><span class="tx"><b>Rename</b></span></button>
+    <button class="item" id="mColor"><span class="ic">${I.palette}</span><span class="tx"><b>Change color</b></span></button>
+    <button class="item" id="mWav"><span class="ic">${I.down}</span><span class="tx"><b>Export this layer</b><small>WAV, at the current tempo and volume</small></span></button>
+    <button class="item danger" id="mDel"><span class="ic">${I.trash}</span><span class="tx"><b>Delete layer</b></span></button>
+  </div>`, p => {
+    $('#mRename', p).onclick = () => renameLayer(l);
+    $('#mColor', p).onclick = () => colorPicker(l);
+    $('#mWav', p).onclick = () => { closeSheet(); exportLayer(l); };
+    $('#mDel', p).onclick = () => { closeSheet(); deleteLayer(l); };
+  });
+}
+function colorPicker(l) {
+  openSheet(`<h3>Layer color</h3><div class="swatches">${PALETTE.map(c => `<button class="sw${c === l.color ? ' sel' : ''}" style="--c:${c}" data-c="${c}" aria-label="Color ${c}"></button>`).join('')}</div>`, p => {
+    p.querySelectorAll('.sw').forEach(b => b.onclick = () => { l.color = b.dataset.c; setDirty(); renderLayers(); closeSheet(); });
+  });
+}
+function deleteLayer(l) {
+  if (T.rec && T.rec.layer === l) cancelRecord(true);
+  const i = S.layers.indexOf(l); if (i < 0) return;
+  stopLayerSource(l); S.layers.splice(i, 1);
+  if (l.node) { l.node.disconnect(); l.node = null; }
+  applyGains(); setDirty(); renderLayers();
+  toast('Layer deleted', 'Undo', () => { S.layers.splice(i, 0, l); attachLayer(l); applyGains(); startLayerSource(l); setDirty(); renderLayers(); });
+}
+
+/* ---------------- Transport controls ---------------- */
+$('#playBtn').addEventListener('click', () => { T.playing ? stop() : play(); });
+$('#recBtn').addEventListener('click', () => { T.rec ? cancelRecord() : startRecord('new'); });
+$('#clickTog').addEventListener('click', () => { S.click = !S.click; setDirty(); renderTransport(); });
+$('#countTog').addEventListener('click', () => { S.countIn = !S.countIn; setDirty(); renderTransport(); });
+$('#barsSel').innerHTML = BARS.map(b => `<option value="${b}">${b}</option>`).join('');
+$('#sigSel').innerHTML = SIGS.map(([n, d]) => `<option value="${n}/${d}">${n}/${d}</option>`).join('');
+$('#barsSel').addEventListener('change', e => changeTiming(() => { S.bars = +e.target.value; }));
+$('#sigSel').addEventListener('change', e => { const [n, d] = e.target.value.split('/').map(Number); changeTiming(() => { S.num = n; S.den = d; }); });
+
+let pendingBpm = null, bpmTimer = null;
+function nudgeBpm(delta) {
+  if (T.rec) return toast('Finish or cancel the take first');
+  pendingBpm = clamp(Math.round((pendingBpm ?? S.bpm) + delta), 40, 240);
+  $('#bpmVal').textContent = pendingBpm;
+  clearTimeout(bpmTimer);
+  bpmTimer = setTimeout(() => { const v = pendingBpm; pendingBpm = null; if (v !== S.bpm) changeTiming(() => { S.bpm = v; }); }, S.layers.length ? 350 : 60);
+}
+function holdRepeat(btn, delta) {
+  let t1, t2;
+  const end = () => { clearTimeout(t1); clearInterval(t2); };
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); nudgeBpm(delta); t1 = setTimeout(() => { t2 = setInterval(() => nudgeBpm(delta), 70); }, 380); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, end));
+}
+holdRepeat($('#bpmDown'), -1); holdRepeat($('#bpmUp'), 1);
+$('#bpmBtn').addEventListener('click', () => {
+  openSheet(`<h3>Tempo</h3>
+    <div class="bignum" id="tVal">${Math.round(S.bpm)}</div>
+    <div class="field" style="margin-top:14px"><input type="range" id="tRange" min="40" max="240" step="1" value="${Math.round(S.bpm)}" style="--fill:${(S.bpm - 40) / 2}%" aria-label="Tempo"></div>
+    <div class="field"><label for="tIn">Type a tempo</label><input class="txt num" id="tIn" type="number" inputmode="numeric" min="40" max="240" value="${Math.round(S.bpm)}"></div>
+    <div class="btnrow"><button class="btn" data-close>Cancel</button><button class="btn primary" id="tOk">Set tempo</button></div>`, p => {
+    const r = $('#tRange', p), n = $('#tIn', p), v = $('#tVal', p);
+    const sync = x => { x = clamp(Math.round(+x || 90), 40, 240); v.textContent = x; r.value = x; r.style.setProperty('--fill', `${(x - 40) / 2}%`); return x; };
+    r.oninput = () => { n.value = r.value; sync(r.value); };
+    n.oninput = () => { if (n.value.length >= 2) sync(n.value); };
+    $('#tOk', p).onclick = () => { const x = sync(n.value); closeSheet(); if (x !== S.bpm) changeTiming(() => { S.bpm = x; }); };
+  });
+});
+
+/* ---------------- Session name ---------------- */
+$('#sessName').addEventListener('click', () => {
+  openSheet(`<h3>Session name</h3><div class="field"><input class="txt" id="snIn" maxlength="60" value="${esc(S.name)}"></div>
+    <div class="btnrow"><button class="btn" data-close>Cancel</button><button class="btn primary" id="snOk">Rename</button></div>`, p => {
+    const inp = $('#snIn', p); setTimeout(() => { inp.focus(); inp.select(); }, 250);
+    const ok = () => { S.name = inp.value.trim() || 'Untitled idea'; setDirty(); renderTransport(); closeSheet(); };
+    $('#snOk', p).onclick = ok; inp.onkeydown = e => { if (e.key === 'Enter') ok(); };
+  });
+});
+
+/* ---------------- Storage (IndexedDB on this phone) ---------------- */
+let dbP = null;
+function db() {
+  if (!dbP) dbP = new Promise((res, rej) => {
+    const r = indexedDB.open('hum-looper', 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('meta', { keyPath: 'id' }); d.createObjectStore('data', { keyPath: 'id' }); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  return dbP;
+}
+async function idb(store, mode, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, mode), st = tx.objectStore(store); let out;
+    const q = fn(st); if (q) q.onsuccess = () => { out = q.result; };
+    tx.oncomplete = () => res(out); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  });
+}
+function serialize() {
+  return { id: S.id, name: S.name, bpm: S.bpm, bars: S.bars, num: S.num, den: S.den, click: S.click, countIn: S.countIn, sr: SR(), created: S.created,
+    layers: S.layers.map(l => ({ id: l.id, name: l.name, color: l.color, vol: l.vol, mute: l.mute, solo: l.solo, bpm: l.bpm, sr: l.sr || SR(), data: l.data })) };
+}
+function hydrate(o) {
+  const s = Object.assign(freshSession(), o);
+  s.layers = (o.layers || []).map(l => ({ ...l, data: l.data instanceof Float32Array ? l.data : new Float32Array(l.data), history: [], ver: 0, node: null }));
+  return s;
+}
+async function saveSession() {
+  try {
+    const o = serialize();
+    await idb('data', 'readwrite', st => st.put(o));
+    await idb('meta', 'readwrite', st => st.put({ id: o.id, name: o.name, bpm: o.bpm, bars: o.bars, sig: `${o.num}/${o.den}`, layers: o.layers.length, updated: Date.now() }));
+    settings.lastSession = S.id; saveSettings();
+    setDirty(false); toast('Saved to this phone');
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  } catch (e) { toast('Could not save. Your phone may be out of space.'); }
+}
+async function loadSession(id) {
+  const o = await idb('data', 'readonly', st => st.get(id));
+  if (!o) { toast('That session could not be found'); return; }
+  replaceSession(hydrate(o));
+  settings.lastSession = id; saveSettings();
+}
+function replaceSession(ns) {
+  if (T.playing) stop();
+  S.layers.forEach(l => { if (l.node) l.node.disconnect(); });
+  S = ns;
+  if (T.ctx) { adoptSampleRate(); S.layers.forEach(attachLayer); applyGains(true); }
+  setDirty(false); renderTransport(); renderLayers();
+}
+$('#saveBtn').addEventListener('click', saveSession);
+window.addEventListener('beforeunload', e => { if (dirty && S.layers.length) { e.preventDefault(); e.returnValue = ''; } });
+
+function guardUnsaved(proceed) {
+  if (!dirty || !S.layers.length) return proceed();
+  openSheet(`<h3>Save "${esc(S.name)}" first?</h3><p class="note">This session has changes that aren't saved yet.</p>
+    <div class="list"><button class="item" id="gSave"><span class="tx"><b>Save, then continue</b></span></button>
+    <button class="item danger" id="gDiscard"><span class="tx"><b>Discard changes</b></span></button>
+    <button class="item" data-close><span class="tx"><b>Cancel</b></span></button></div>`, p => {
+    $('#gSave', p).onclick = async () => { await saveSession(); closeSheet(); proceed(); };
+    $('#gDiscard', p).onclick = () => { closeSheet(); proceed(); };
+  });
+}
+
+/* ---------------- Menu ---------------- */
+$('#menuBtn').addEventListener('click', () => {
+  openSheet(`<h3>Hum Looper</h3><div class="list">
+    <button class="item" id="mNew"><span class="ic">${I.newf}</span><span class="tx"><b>New session</b></span></button>
+    <button class="item" id="mOpen"><span class="ic">${I.folder}</span><span class="tx"><b>Open a saved session</b></span></button>
+    <button class="item" id="mExport"><span class="ic">${I.down}</span><span class="tx"><b>Export</b><small>Full mix, layers, session backup</small></span></button>
+    <button class="item" id="mImport"><span class="ic">${I.up}</span><span class="tx"><b>Import a session backup</b><small>.humloop file</small></span></button>
+    <button class="item" id="mSettings"><span class="ic">${I.gear}</span><span class="tx"><b>Settings</b><small>Recording offset, click volume</small></span></button>
+  </div>`, p => {
+    $('#mNew', p).onclick = () => { closeSheet(); guardUnsaved(() => { replaceSession(freshSession()); toast('New session'); }); };
+    $('#mOpen', p).onclick = openSessions;
+    $('#mExport', p).onclick = openExport;
+    $('#mImport', p).onclick = () => { closeSheet(); guardUnsaved(() => $('#importFile').click()); };
+    $('#mSettings', p).onclick = openSettings;
+  });
+});
+async function openSessions() {
+  let metas = [];
+  try { metas = (await idb('meta', 'readonly', st => st.getAll())) || []; } catch (e) {}
+  metas.sort((a, b) => b.updated - a.updated);
+  const fmt = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  openSheet(`<h3>Saved sessions</h3>${metas.length ? `<div class="list">${metas.map(m => `
+    <div class="item" style="padding:0;background:none;gap:6px">
+      <button class="item" data-open="${m.id}" style="flex:1;min-width:0"><span class="tx"><b>${esc(m.name)}${m.id === S.id ? ' · open now' : ''}</b><small class="num">${m.bpm} BPM · ${m.sig} · ${m.bars} bars · ${m.layers} layer${m.layers === 1 ? '' : 's'} · ${fmt(m.updated)}</small></span></button>
+      <button class="ibtn" data-del="${m.id}" aria-label="Delete ${esc(m.name)}" style="height:52px;width:44px;border-radius:12px">${I.trash}</button>
+    </div>`).join('')}</div>` : '<p class="note">No saved sessions yet. Tap Save at the top to keep the one you\'re working on.</p>'}`, p => {
+    p.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { const id = b.dataset.open; closeSheet(); guardUnsaved(() => loadSession(id)); });
+    p.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      if (!b.classList.contains('armed')) { b.classList.add('armed'); b.style.background = 'var(--rec-dim)'; b.style.color = 'var(--rec)'; toast('Tap the trash again to delete'); return; }
+      const id = b.dataset.del;
+      await idb('meta', 'readwrite', st => st.delete(id)); await idb('data', 'readwrite', st => st.delete(id));
+      if (id === S.id) setDirty(true);
+      toast('Session deleted'); openSessions();
+    });
+  });
+}
+
+/* ---------------- Settings & calibration ---------------- */
+function openSettings() {
+  const cur = Math.round(latency() * 1000);
+  openSheet(`<h3>Settings</h3>
+    <div class="field"><div class="readout"><label for="latR">Recording offset</label><b id="latV">${cur} ms${settings.latencyMs == null ? ' · auto' : ''}</b></div>
+      <input type="range" id="latR" min="0" max="400" step="1" value="${cur}" style="--fill:${cur / 4}%" aria-label="Recording offset in milliseconds">
+      <p class="help">How much to shift new takes earlier so they land on the beat. Calibrate once for the headphones you use.</p>
+      <div class="btnrow"><button class="btn" id="latAuto">Use automatic</button><button class="btn primary" id="latCal">Calibrate</button></div>
+      <p class="status" id="calStatus"></p></div>
+    <div class="field"><div class="readout"><label for="cvR">Click volume</label><b id="cvV">${Math.round(settings.clickVol * 100)}%</b></div>
+      <input type="range" id="cvR" min="0" max="1" step="0.01" value="${settings.clickVol}" style="--fill:${settings.clickVol * 100}%" aria-label="Click volume"></div>
+    <p class="note">${I.head} Record with wired headphones. Bluetooth headphones add a delay that changes between devices, so recalibrate if you use them.</p>`, p => {
+    const r = $('#latR', p), v = $('#latV', p);
+    r.oninput = () => { settings.latencyMs = +r.value; v.textContent = `${r.value} ms`; r.style.setProperty('--fill', `${r.value / 4}%`); saveSettings(); };
+    $('#latAuto', p).onclick = () => { settings.latencyMs = null; saveSettings(); openSettings(); };
+    $('#latCal', p).onclick = () => calibrate(p);
+    const c = $('#cvR', p);
+    c.oninput = () => { settings.clickVol = +c.value; $('#cvV', p).textContent = `${Math.round(c.value * 100)}%`; c.style.setProperty('--fill', `${c.value * 100}%`); if (T.clickBus) T.clickBus.gain.value = settings.clickVol; saveSettings(); };
+  });
+}
+async function calibrate(p) {
+  const st = $('#calStatus', p), btn = $('#latCal', p);
+  if (T.rec) { st.textContent = 'Finish the take first.'; return; }
+  if (T.playing) stop();
+  st.className = 'status';
+  st.innerHTML = 'Hold an earbud right against the phone\'s mic (or unplug and use the speaker). Listen for 8 clicks…';
+  await ensureCtx();
+  if (!(await ensureMic())) return;
+  btn.disabled = true;
+  await new Promise(r => setTimeout(r, 1500));
+  const ctx = T.ctx, t0 = ctx.currentTime + 0.3, gap = 0.45, n = 8, times = [];
+  const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(ctx.destination);
+  T.calib = { chunks: [] };
+  for (let i = 0; i < n; i++) { const t = t0 + i * gap; times.push(t); clickAt(t, 2, bus, 1.1); }
+  await new Promise(r => setTimeout(r, (0.3 + n * gap + 0.6) * 1000));
+  const chunks = T.calib.chunks; T.calib = null; btn.disabled = false; bus.disconnect();
+  if (!chunks.length) { st.className = 'status bad'; st.textContent = 'No audio came in from the mic. Try again.'; return; }
+  const f0 = chunks[0].frame, total = chunks[chunks.length - 1].frame + chunks[chunks.length - 1].data.length - f0;
+  const sig = new Float32Array(total); for (const c of chunks) sig.set(c.data, c.frame - f0);
+  const sr = T.sr, offs = [];
+  let noise = 0; for (let i = 0; i < Math.min(sig.length, Math.round(0.25 * sr)); i++) noise = Math.max(noise, Math.abs(sig[i]));
+  for (const t of times) {
+    const a = Math.round(t * sr) - f0, b = a + Math.round(0.38 * sr);
+    if (a < 0 || b > sig.length) continue;
+    let pk = 0; for (let i = a; i < b; i++) pk = Math.max(pk, Math.abs(sig[i]));
+    if (pk < Math.max(0.02, noise * 4)) continue;
+    const th = pk * 0.4; let i = a; while (i < b && Math.abs(sig[i]) < th) i++;
+    offs.push((i - a) / sr);
+  }
+  if (offs.length < 5) { st.className = 'status bad'; st.textContent = 'Couldn\'t hear the clicks clearly. Turn the volume up, hold the earbud closer to the mic, and try again.'; return; }
+  offs.sort((x, y) => x - y);
+  const med = offs[Math.floor(offs.length / 2)], spread = (offs[offs.length - 2] - offs[1]) * 1000;
+  settings.latencyMs = Math.round(med * 1000); saveSettings();
+  const r = $('#latR', p); r.value = settings.latencyMs; r.style.setProperty('--fill', `${settings.latencyMs / 4}%`);
+  $('#latV', p).textContent = `${settings.latencyMs} ms`;
+  st.className = spread < 12 ? 'status good' : 'status';
+  st.textContent = spread < 12 ? `Calibrated: ${settings.latencyMs} ms. New takes will land on the beat.` : `Set to ${settings.latencyMs} ms, but readings varied by ${Math.round(spread)} ms. Run it once more in a quieter spot for a steadier number.`;
+}
+
+/* ---------------- Export ---------------- */
+function encodeWav(f32, sr) {
+  const n = f32.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const s = clamp(f32[i], -1, 1); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+  return new Uint8Array(buf);
+}
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, 0, true); lh.setUint16(12, 33, true); lh.setUint32(14, crc, true); lh.setUint32(18, size, true); lh.setUint32(22, size, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh, name, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, 0, true); ch.setUint16(14, 33, true); ch.setUint32(16, crc, true); ch.setUint32(20, size, true); ch.setUint32(24, size, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, off, true);
+    central.push(ch, name);
+    off += 30 + name.length + size;
+  }
+  const cdSize = central.reduce((a, p) => a + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, end], { type: 'application/zip' });
+}
+function download(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
+}
+const slug = s => (s || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'untitled';
+const baseName = () => `${slug(S.name)}-${Math.round(S.bpm)}bpm`;
+const layerFile = (l, i) => `${String(i + 1).padStart(2, '0')}-${l.name ? slug(l.name) : 'layer'}`;
+function layerAudio(l) { const f = getFitted(l), g = l.vol * l.vol, out = new Float32Array(f.length); for (let i = 0; i < f.length; i++) out[i] = f[i] * g; return out; }
+function mixAudio() {
+  const N = loopSamples(), out = new Float32Array(N), any = S.layers.some(l => l.solo);
+  for (const l of S.layers) { if (any ? !l.solo : l.mute) continue; const a = layerAudio(l); for (let i = 0; i < N; i++) out[i] += a[i]; }
+  let pk = 0; for (let i = 0; i < N; i++) pk = Math.max(pk, Math.abs(out[i]));
+  if (pk > 0.98) { const k = 0.98 / pk; for (let i = 0; i < N; i++) out[i] *= k; }
+  return out;
+}
+function needLayers() { if (!S.layers.length) { toast('Record a layer first'); return false; } return true; }
+function exportLayer(l) { const i = S.layers.indexOf(l); download(new Blob([encodeWav(layerAudio(l), SR())], { type: 'audio/wav' }), `${baseName()}-${layerFile(l, i)}.wav`); toast('Layer exported'); }
+function openExport() {
+  openSheet(`<h3>Export</h3><div class="list">
+    <button class="item" id="xMix"><span class="ic">${I.wave}</span><span class="tx"><b>Full mix</b><small>One WAV of what you hear</small></span></button>
+    <button class="item" id="xZip"><span class="ic">${I.zip}</span><span class="tx"><b>All layers</b><small>A zip of one WAV per layer, ready for your DAW</small></span></button>
+    <button class="item" id="xBak"><span class="ic">${I.down}</span><span class="tx"><b>Session backup</b><small>.humloop file to re-import here or on a new phone</small></span></button>
+  </div>${S.layers.length ? `<p class="note" style="margin-top:14px">Exports use the current tempo, loop length and each layer's volume. Muted layers are left out of the full mix.</p>` : ''}`, p => {
+    $('#xMix', p).onclick = () => { if (!needLayers()) return; download(new Blob([encodeWav(mixAudio(), SR())], { type: 'audio/wav' }), `${baseName()}-mix.wav`); toast('Full mix exported'); };
+    $('#xZip', p).onclick = () => { if (!needLayers()) return; const files = S.layers.map((l, i) => ({ name: `${layerFile(l, i)}.wav`, data: encodeWav(layerAudio(l), SR()) })); download(makeZip(files), `${baseName()}-layers.zip`); toast('Layers exported'); };
+    $('#xBak', p).onclick = () => { download(makeBackup(), `${slug(S.name)}.humloop`); toast('Backup exported'); };
+  });
+}
+/* Backup format: "HUMLOOP1" | u32 json length | json | pad to 4 | float32 layer data */
+function makeBackup() {
+  const o = serialize(); let offset = 0;
+  const meta = { app: 'hum-looper', version: 1, session: { ...o, layers: o.layers.map(l => { const m = { ...l, offset, length: l.data.length }; delete m.data; offset += l.data.length; return m; }) } };
+  const json = new TextEncoder().encode(JSON.stringify(meta));
+  const head = 12 + json.length, pad = (4 - (head % 4)) % 4;
+  const hdr = new Uint8Array(head + pad), dv = new DataView(hdr.buffer);
+  'HUMLOOP1'.split('').forEach((c, i) => { hdr[i] = c.charCodeAt(0); });
+  dv.setUint32(8, json.length, true); hdr.set(json, 12);
+  return new Blob([hdr, ...o.layers.map(l => l.data)], { type: 'application/octet-stream' });
+}
+function parseBackup(buf) {
+  const u8 = new Uint8Array(buf);
+  if (String.fromCharCode(...u8.subarray(0, 8)) !== 'HUMLOOP1') throw new Error('not a backup');
+  const len = new DataView(buf).getUint32(8, true);
+  const meta = JSON.parse(new TextDecoder().decode(u8.subarray(12, 12 + len)));
+  const head = 12 + len, start = head + ((4 - (head % 4)) % 4);
+  const all = new Float32Array(buf, start, (buf.byteLength - start) >> 2);
+  const s = meta.session;
+  s.layers = s.layers.map(l => { const d = all.slice(l.offset, l.offset + l.length); delete l.offset; delete l.length; return { ...l, data: d }; });
+  return s;
+}
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { const s = parseBackup(await f.arrayBuffer()); replaceSession(hydrate(s)); setDirty(true); toast('Backup loaded. Tap Save to keep it on this phone.'); }
+  catch (err) { toast('That file isn\'t a Hum Looper backup'); }
+});
+
+/* ---------------- Boot ---------------- */
+renderTransport(); renderLayers(); renderRecState();
+(async () => { if (settings.lastSession) { try { await loadSession(settings.lastSession); } catch (e) {} } })();
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(renderLayers, 150); });
+</script>
+</body>
+</html>

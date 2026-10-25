@@ -33,7 +33,7 @@ button:disabled{opacity:.35;cursor:default}
 
 .app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+  padding-bottom:calc(136px + env(safe-area-inset-bottom,0px))}
 
 /* Header */
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;gap:10px;padding-block:12px 10px}
@@ -156,6 +156,24 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radiu
 .layer.armed{box-shadow:inset 0 0 0 1.5px rgba(255,77,94,.35)}
 .layer.armed .wave{opacity:.55}
 
+/* Visual metronome */
+.beatbar{max-width:560px;margin:0 auto 12px;display:flex;gap:5px;height:10px}
+.beatbar i{flex:1;border-radius:5px;background:var(--surface-2);transition:background .14s ease-out,box-shadow .14s ease-out,transform .14s ease-out}
+.beatbar i.hit{background:var(--fg);transform:scaleY(1.5);transition-duration:0s}
+.beatbar i.hit.acc{background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.flash{position:fixed;inset:0;z-index:35;pointer-events:none;opacity:0;box-shadow:inset 0 0 0 4px var(--fg),inset 0 0 60px rgba(236,238,243,.25);transition:opacity .16s ease-out}
+.flash.acc{box-shadow:inset 0 0 0 6px var(--accent),inset 0 0 90px rgba(154,168,255,.4)}
+.flash.on{opacity:1;transition-duration:0s}
+.rec-live .flash.acc{box-shadow:inset 0 0 0 6px var(--rec),inset 0 0 90px rgba(255,77,94,.35)}
+.switch{margin-left:auto;width:42px;height:24px;border-radius:12px;background:var(--surface-3);position:relative;flex:none;transition:background .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:transform .22s var(--ease),background .2s}
+[aria-pressed="true"] .switch{background:var(--accent)}
+[aria-pressed="true"] .switch::after{transform:translateX(18px);background:var(--bg)}
+.seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;height:38px;border-radius:9px;font-weight:600;font-size:13px;color:var(--muted);transition:background .2s,color .2s}
+.seg button[aria-pressed="true"]{background:var(--surface-3);color:var(--fg)}
+.chip .hold{font-size:9px;color:var(--faint);margin-left:2px}
+
 /* Count-in overlay */
 .countin{position:fixed;inset:0;z-index:40;display:grid;place-items:center;pointer-events:none;background:rgba(13,14,18,.55);opacity:0;transition:opacity .2s}
 .countin.show{opacity:1}
@@ -207,7 +225,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radiu
 .note{background:var(--surface-2);border-radius:12px;padding:12px 14px;color:var(--muted);font-size:13px;margin:0 0 18px}
 
 /* Toast */
-.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:60;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+.toast{position:fixed;left:50%;bottom:calc(118px + env(safe-area-inset-bottom,0px));z-index:60;transform:translate(-50%,20px);opacity:0;pointer-events:none;
   background:var(--surface-3);color:var(--fg);border-radius:12px;padding:11px 14px;display:flex;gap:14px;align-items:center;font-size:13.5px;font-weight:500;
   max-width:calc(100% - 32px);transition:opacity .22s,transform .3s var(--ease);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
@@ -242,7 +260,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radiu
     <div class="chips">
       <label class="chip">Bars <select id="barsSel" aria-label="Loop length in bars"></select><span class="caret">▼</span></label>
       <label class="chip">Time <select id="sigSel" aria-label="Time signature"></select><span class="caret">▼</span></label>
-      <button class="chip" id="clickTog"><span class="led"></span>Click</button>
+      <button class="chip" id="clickTog" aria-label="Click on or off. Hold for metronome settings."><span class="led"></span>Click<span class="hold">•••</span></button>
       <button class="chip" id="countTog"><span class="led"></span>Count-in</button>
     </div>
   </section>
@@ -251,7 +269,9 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border:0;border-radiu
   <div id="layers"></div>
 </div>
 
+<div class="flash" id="flash"></div>
 <div class="bottom">
+  <div class="beatbar" id="beatbar" aria-hidden="true"></div>
   <div class="bottom-in">
     <button class="play" id="playBtn" aria-label="Play">
       <svg id="playIc" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
@@ -303,7 +323,7 @@ const I = {
 };
 
 /* ---------------- Settings (per device) ---------------- */
-const settings = { latencyMs: null, clickVol: 0.6, lastSession: null };
+const settings = { latencyMs: null, clickVol: 0.6, lastSession: null, clickSound: 'click', accent: true, flash: 'auto', noHeadphones: false, holdTipSeen: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('hl.settings') || '{}')); } catch (e) {}
 function saveSettings() { try { localStorage.setItem('hl.settings', JSON.stringify(settings)); } catch (e) {} }
 
@@ -368,23 +388,37 @@ class HLCapture extends AudioWorkletProcessor {
 }
 registerProcessor('hl-capture', HLCapture);`;
 
-async function ensureMic() {
-  if (T.worklet) return true;
+/* Opens the mic. With echo cancellation on (no-headphones mode), Chrome removes
+   the app's own playback and click from what the mic hears. */
+async function ensureMic(forceRaw) {
+  const wantAec = !forceRaw && settings.noHeadphones;
+  if (T.worklet && T.micAec === wantAec) return true;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micError('insecure'); return false; }
+  closeMic();
   try {
-    T.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+    T.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: wantAec, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
   } catch (e) { micError(e && e.name); return false; }
   try {
-    const url = URL.createObjectURL(new Blob([CAPTURE_CODE], { type: 'application/javascript' }));
-    await T.ctx.audioWorklet.addModule(url);
-    const src = T.ctx.createMediaStreamSource(T.stream);
+    if (!T.moduleLoaded) {
+      const url = URL.createObjectURL(new Blob([CAPTURE_CODE], { type: 'application/javascript' }));
+      await T.ctx.audioWorklet.addModule(url);
+      T.moduleLoaded = true;
+    }
+    T.micSrc = T.ctx.createMediaStreamSource(T.stream);
     T.worklet = new AudioWorkletNode(T.ctx, 'hl-capture', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
-    src.connect(T.worklet);
-    const silent = T.ctx.createGain(); silent.gain.value = 0;
-    T.worklet.connect(silent).connect(T.ctx.destination);
+    T.micSrc.connect(T.worklet);
+    T.micSink = T.ctx.createGain(); T.micSink.gain.value = 0;
+    T.worklet.connect(T.micSink).connect(T.ctx.destination);
     T.worklet.port.onmessage = e => onChunk(e.data.frame, e.data.data);
+    T.micAec = wantAec;
     return true;
   } catch (e) { micError('worklet'); return false; }
+}
+function closeMic() {
+  try { T.micSrc && T.micSrc.disconnect(); T.worklet && T.worklet.disconnect(); T.micSink && T.micSink.disconnect(); } catch (e) {}
+  if (T.worklet) T.worklet.port.onmessage = null;
+  if (T.stream) T.stream.getTracks().forEach(t => t.stop());
+  T.worklet = T.micSrc = T.micSink = T.stream = null;
 }
 function micError(kind) {
   const msg = {
@@ -403,15 +437,24 @@ function accentOf(tick) {
   if (S.den === 8 && S.num % 3 === 0 && S.num > 3 && t % 3 === 0) return 1;
   return 0;
 }
-function clickAt(t, level, bus = T.clickBus, gainMul = 1) {
+const CLICK_SOUNDS = {
+  click: { type: 'triangle', f: [1000, 1320, 1680], decay: 0.045, drop: 1 },
+  wood:  { type: 'sine', f: [780, 980, 1250], decay: 0.06, drop: 0.55 },
+  beep:  { type: 'sine', f: [880, 1100, 1320], decay: 0.09, drop: 1 },
+};
+function clickAt(t, level, bus = T.clickBus, gainMul = 1, sound) {
+  const snd = CLICK_SOUNDS[sound || settings.clickSound] || CLICK_SOUNDS.click;
+  if (!settings.accent && bus === T.clickBus) level = 0;
   const ctx = T.ctx, o = ctx.createOscillator(), g = ctx.createGain();
-  o.type = 'triangle';
-  o.frequency.value = level === 2 ? 1680 : level === 1 ? 1320 : 1000;
+  o.type = snd.type;
+  const f = snd.f[level];
+  o.frequency.setValueAtTime(f, t);
+  if (snd.drop !== 1) o.frequency.exponentialRampToValueAtTime(f * snd.drop, t + snd.decay);
   const peak = (level === 2 ? 0.9 : 0.55) * gainMul;
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
-  o.connect(g).connect(bus); o.start(t); o.stop(t + 0.06);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + snd.decay);
+  o.connect(g).connect(bus); o.start(t); o.stop(t + snd.decay + 0.02);
 }
 function schedule() {
   if (!T.playing) return;
@@ -421,9 +464,10 @@ function schedule() {
     if (t > now + 0.12) break;
     if (t >= now - 0.005) {
       const r = T.rec;
-      const forced = r && r.countFrom != null && t >= r.countFrom - 1e-4 && t < r.recStart - 1e-4;
+      const inCount = r && r.countFrom != null && t >= r.countFrom - 1e-4 && t < r.recStart - 1e-4;
       const preroll = T.nextTick < 0;
-      if ((S.click && !preroll) || forced) clickAt(t, accentOf(T.nextTick));
+      // With Click off, count-in is silent too and you follow the visual beat.
+      if (S.click && (!preroll || inCount)) clickAt(t, accentOf(T.nextTick));
       pulseBeat(t, T.nextTick);
     }
     T.nextTick++;
@@ -650,6 +694,8 @@ function renderTransport() {
   $('#loopInfo').textContent = `${loopDur().toFixed(1)}s loop`;
   const dots = $('#beatdots');
   if (dots.children.length !== S.num) dots.innerHTML = Array.from({ length: S.num }, () => '<i></i>').join('');
+  const bb = $('#beatbar');
+  if (bb.children.length !== S.num) bb.innerHTML = Array.from({ length: S.num }, () => '<i></i>').join('');
 }
 function layerRow(l, i) {
   const recThis = T.rec && T.rec.layer === l;
@@ -684,7 +730,7 @@ function renderLayers() {
     box.innerHTML = `<div class="empty">
       <h3>Hum your first loop</h3>
       <ol>
-        <li>Plug in wired headphones so the click stays out of your recording.</li>
+        <li>Plug in wired headphones so the click stays out of your recording. No headphones? Turn on No-headphones mode in Settings.</li>
         <li>Set the tempo, bars and time signature above.</li>
         <li>Tap Record. You'll get a bar of count-in, then one loop to hum into.</li>
       </ol>
@@ -771,7 +817,7 @@ function updateRecPhase() {
 }
 
 /* ---------------- Animation loop ---------------- */
-let lastCount = 0, frameN = 0;
+let lastCount = 0, frameN = 0, beatOff, flashOff;
 function frame() {
   requestAnimationFrame(frame);
   if (!T.ctx || !T.playing) return;
@@ -784,8 +830,16 @@ function frame() {
   }
   while (beatQueue.length && beatQueue[0].t <= now) {
     const { tick } = beatQueue.shift();
-    const dots = $('#beatdots').children, idx = ((tick % S.num) + S.num) % S.num;
-    for (let i = 0; i < dots.length; i++) dots[i].className = i === idx ? (idx === 0 ? 'hit acc' : 'hit') : '';
+    const idx = ((tick % S.num) + S.num) % S.num, acc = accentOf(tick) > 0 && settings.accent;
+    for (const box of [$('#beatdots'), $('#beatbar')]) {
+      const d = box.children;
+      for (let i = 0; i < d.length; i++) d[i].className = i === idx ? (acc ? 'hit acc' : 'hit') : '';
+    }
+    clearTimeout(beatOff); beatOff = setTimeout(() => { for (const x of $('#beatbar').children) x.classList.remove('hit'); }, Math.min(150, tickDur() * 500));
+    if (settings.flash === 'always' || (settings.flash === 'auto' && !S.click)) {
+      const fl = $('#flash'); fl.classList.toggle('acc', acc); fl.classList.add('on');
+      clearTimeout(flashOff); flashOff = setTimeout(() => fl.classList.remove('on'), 70);
+    }
   }
   const r = T.rec, ov = $('#countin');
   if (r) {
@@ -890,7 +944,46 @@ function deleteLayer(l) {
 /* ---------------- Transport controls ---------------- */
 $('#playBtn').addEventListener('click', () => { T.playing ? stop() : play(); });
 $('#recBtn').addEventListener('click', () => { T.rec ? cancelRecord() : startRecord('new'); });
-$('#clickTog').addEventListener('click', () => { S.click = !S.click; setDirty(); renderTransport(); });
+(() => {
+  const b = $('#clickTog'); let timer, held = false;
+  b.addEventListener('pointerdown', () => { held = false; timer = setTimeout(() => { held = true; haptic(15); openMetronome(); }, 450); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(timer)));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+  b.addEventListener('click', () => {
+    if (held) { held = false; return; }
+    S.click = !S.click; setDirty(); renderTransport();
+    if (!S.click) toast(settings.flash === 'off' ? 'Click off' : 'Click off · follow the flashing beat');
+    if (!settings.holdTipSeen) { settings.holdTipSeen = true; saveSettings(); setTimeout(() => toast('Tip: hold Click for metronome settings'), 2300); }
+  });
+})();
+function openMetronome() {
+  const segBtns = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" aria-pressed="${v === cur}">${l}</button>`).join('')}</div>`;
+  openSheet(`<h3>Metronome</h3>
+    <button class="item" id="mtOn" aria-pressed="${S.click}" style="margin-bottom:18px"><span class="tx"><b>Click</b><small>Off means silent clicks and a silent count-in</small></span><span class="switch"></span></button>
+    <div class="field"><div class="readout"><label for="mtVol">Volume</label><b id="mtVolV">${Math.round(settings.clickVol * 100)}%</b></div>
+      <input type="range" id="mtVol" min="0" max="1" step="0.01" value="${settings.clickVol}" style="--fill:${settings.clickVol * 100}%" aria-label="Click volume"></div>
+    <div class="field"><label>Sound</label>${segBtns('clickSound', [['click', 'Click'], ['wood', 'Wood'], ['beep', 'Beep']], settings.clickSound)}</div>
+    <div class="field"><label>Flash the screen on each beat</label>${segBtns('flash', [['off', 'Never'], ['auto', 'When click is off'], ['always', 'Always']], settings.flash)}
+      <p class="help">The beat bar above the record button always lights up on every beat.</p></div>
+    <button class="item" id="mtAcc" aria-pressed="${settings.accent}"><span class="tx"><b>Accent the first beat</b><small>Higher click and a colored flash on beat 1</small></span><span class="switch"></span></button>`, p => {
+    $('#mtOn', p).onclick = e => { S.click = !S.click; e.currentTarget.setAttribute('aria-pressed', S.click); setDirty(); renderTransport(); };
+    $('#mtAcc', p).onclick = e => { settings.accent = !settings.accent; e.currentTarget.setAttribute('aria-pressed', settings.accent); saveSettings(); preview(); };
+    const v = $('#mtVol', p);
+    v.oninput = () => { settings.clickVol = +v.value; $('#mtVolV', p).textContent = `${Math.round(v.value * 100)}%`; v.style.setProperty('--fill', `${v.value * 100}%`); if (T.clickBus) T.clickBus.gain.value = settings.clickVol; saveSettings(); };
+    v.onchange = preview;
+    p.querySelectorAll('[data-seg]').forEach(g => g.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+      settings[g.dataset.seg] = btn.dataset.v; saveSettings();
+      g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === btn));
+      if (g.dataset.seg === 'clickSound') preview();
+    }));
+  });
+}
+/* Play one bar of clicks so a settings change can be heard (skipped while the loop is playing). */
+async function preview() {
+  await ensureCtx(); if (T.playing) return;
+  const t = T.ctx.currentTime + 0.05, td = Math.min(tickDur(), 0.4);
+  for (let i = 0; i < Math.min(S.num, 4); i++) clickAt(t + i * td, i === 0 ? 2 : 0);
+}
 $('#countTog').addEventListener('click', () => { S.countIn = !S.countIn; setDirty(); renderTransport(); });
 $('#barsSel').innerHTML = BARS.map(b => `<option value="${b}">${b}</option>`).join('');
 $('#sigSel').innerHTML = SIGS.map(([n, d]) => `<option value="${n}/${d}">${n}/${d}</option>`).join('');
@@ -1007,7 +1100,7 @@ $('#menuBtn').addEventListener('click', () => {
     <button class="item" id="mOpen"><span class="ic">${I.folder}</span><span class="tx"><b>Open a saved session</b></span></button>
     <button class="item" id="mExport"><span class="ic">${I.down}</span><span class="tx"><b>Export</b><small>Full mix, layers, session backup</small></span></button>
     <button class="item" id="mImport"><span class="ic">${I.up}</span><span class="tx"><b>Import a session backup</b><small>.humloop file</small></span></button>
-    <button class="item" id="mSettings"><span class="ic">${I.gear}</span><span class="tx"><b>Settings</b><small>Recording offset, click volume</small></span></button>
+    <button class="item" id="mSettings"><span class="ic">${I.gear}</span><span class="tx"><b>Settings</b><small>Recording offset, no-headphones mode, metronome</small></span></button>
   </div>`, p => {
     $('#mNew', p).onclick = () => { closeSheet(); guardUnsaved(() => { replaceSession(freshSession()); toast('New session'); }); };
     $('#mOpen', p).onclick = openSessions;
@@ -1046,15 +1139,22 @@ function openSettings() {
       <p class="help">How much to shift new takes earlier so they land on the beat. Calibrate once for the headphones you use.</p>
       <div class="btnrow"><button class="btn" id="latAuto">Use automatic</button><button class="btn primary" id="latCal">Calibrate</button></div>
       <p class="status" id="calStatus"></p></div>
-    <div class="field"><div class="readout"><label for="cvR">Click volume</label><b id="cvV">${Math.round(settings.clickVol * 100)}%</b></div>
-      <input type="range" id="cvR" min="0" max="1" step="0.01" value="${settings.clickVol}" style="--fill:${settings.clickVol * 100}%" aria-label="Click volume"></div>
-    <p class="note">${I.head} Record with wired headphones. Bluetooth headphones add a delay that changes between devices, so recalibrate if you use them.</p>`, p => {
+    <div class="field"><label>Recording</label>
+      <button class="item" id="nhTog" aria-pressed="${settings.noHeadphones}"><span class="ic">${I.head}</span><span class="tx"><b>No-headphones mode</b><small>Filters the app's own playback and click out of the mic, so you can record through the speaker</small></span><span class="switch"></span></button>
+      <p class="help">Best results still come from wired headphones. In this mode, keep the volume moderate, and expect takes to sound slightly more processed. Bluetooth headphones add delay, so recalibrate if you use them.</p></div>
+    <div class="field"><label>Metronome</label>
+      <button class="item" id="mtOpen"><span class="ic">${I.gear}</span><span class="tx"><b>Metronome settings</b><small>Volume, sound, beat flash. Also opens when you hold Click.</small></span></button></div>`, p => {
     const r = $('#latR', p), v = $('#latV', p);
     r.oninput = () => { settings.latencyMs = +r.value; v.textContent = `${r.value} ms`; r.style.setProperty('--fill', `${r.value / 4}%`); saveSettings(); };
     $('#latAuto', p).onclick = () => { settings.latencyMs = null; saveSettings(); openSettings(); };
     $('#latCal', p).onclick = () => calibrate(p);
-    const c = $('#cvR', p);
-    c.oninput = () => { settings.clickVol = +c.value; $('#cvV', p).textContent = `${Math.round(c.value * 100)}%`; c.style.setProperty('--fill', `${c.value * 100}%`); if (T.clickBus) T.clickBus.gain.value = settings.clickVol; saveSettings(); };
+    $('#nhTog', p).onclick = e => {
+      if (T.rec) return toast('Finish or cancel the take first');
+      settings.noHeadphones = !settings.noHeadphones; saveSettings();
+      e.currentTarget.setAttribute('aria-pressed', settings.noHeadphones);
+      toast(settings.noHeadphones ? 'No-headphones mode on' : 'No-headphones mode off');
+    };
+    $('#mtOpen', p).onclick = openMetronome;
   });
 }
 async function calibrate(p) {
@@ -1064,13 +1164,13 @@ async function calibrate(p) {
   st.className = 'status';
   st.innerHTML = 'Hold an earbud right against the phone\'s mic (or unplug and use the speaker). Listen for 8 clicks…';
   await ensureCtx();
-  if (!(await ensureMic())) return;
+  if (!(await ensureMic(true))) return; // raw mic: echo cancellation would erase the test clicks
   btn.disabled = true;
   await new Promise(r => setTimeout(r, 1500));
   const ctx = T.ctx, t0 = ctx.currentTime + 0.3, gap = 0.45, n = 8, times = [];
   const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(ctx.destination);
   T.calib = { chunks: [] };
-  for (let i = 0; i < n; i++) { const t = t0 + i * gap; times.push(t); clickAt(t, 2, bus, 1.1); }
+  for (let i = 0; i < n; i++) { const t = t0 + i * gap; times.push(t); clickAt(t, 2, bus, 1.1, 'click'); }
   await new Promise(r => setTimeout(r, (0.3 + n * gap + 0.6) * 1000));
   const chunks = T.calib.chunks; T.calib = null; btn.disabled = false; bus.disconnect();
   if (!chunks.length) { st.className = 'status bad'; st.textContent = 'No audio came in from the mic. Try again.'; return; }
